@@ -3095,10 +3095,10 @@ void TriggerContentComponent::updateClipCountdowns()
     }
 
     const int fps = juce::jmax (1, frameRateToInt (liveInputFps_));
-    const auto currentTc = liveInputTc_.toDisplayString (liveInputFps_).replaceCharacter ('.', ':');
-    int currentFrames = 0;
-    if (! parseTcToFrames (currentTc, fps, currentFrames))
-        return;
+    // Compute the linear frame count straight from the Timecode struct instead of
+    // formatting it to a string and re-parsing it every tick.
+    const auto& tc = liveInputTc_;
+    int currentFrames = (((tc.hours * 60) + tc.minutes) * 60 + tc.seconds) * fps + tc.frames;
     currentFrames -= globalOffsetFramesFromEditor (resolumeGlobalOffset_, fps);
 
     for (auto& t : triggerRows_)
@@ -3131,10 +3131,10 @@ void TriggerContentComponent::evaluateAndFireTriggers()
         return;
 
     const int fps = juce::jmax (1, frameRateToInt (liveInputFps_));
-    const auto currentTc = liveInputTc_.toDisplayString (liveInputFps_).replaceCharacter ('.', ':');
-    int currentFrames = 0;
-    if (! parseTcToFrames (currentTc, fps, currentFrames))
-        return;
+    // Compute the linear frame count straight from the Timecode struct instead of
+    // formatting it to a string and re-parsing it every tick.
+    const auto& tc = liveInputTc_;
+    int currentFrames = (((tc.hours * 60) + tc.minutes) * 60 + tc.seconds) * fps + tc.frames;
     currentFrames -= globalOffsetFramesFromEditor (resolumeGlobalOffset_, fps);
 
     if (! hasLastInputFrames_)
@@ -3264,10 +3264,10 @@ void TriggerContentComponent::evaluateAndFireTriggers()
     if (bestByLayer.empty())
         return;
 
+    // No global fire throttle: per-window re-fire is already prevented by the
+    // triggerRangeActive_ "wasIn" check above. A blanket 10 ms gate here also
+    // dropped legitimate fires when separate layers/cues land within the window.
     const double now = juce::Time::getMillisecondCounterHiRes() * 0.001;
-    if (now - lastTriggerFireTs_ < 0.01)
-        return;
-    lastTriggerFireTs_ = now;
 
     for (const auto& [layer, c] : bestByLayer)
     {
