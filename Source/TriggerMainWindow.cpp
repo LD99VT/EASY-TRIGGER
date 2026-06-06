@@ -1076,6 +1076,11 @@ TriggerContentComponent::TriggerContentComponent()
 
 TriggerContentComponent::~TriggerContentComponent()
 {
+    // Persist any settings changed via text editors (Resolume IPs/ports, OSC
+    // address, offsets, ...) that don't route through onInputSettingsChanged.
+    if (settingsRestored_)
+        autoSaveSettings();
+
     // Close status monitor first so its OscLog* pointer is never dangling
     if (auto* mon = statusMonitor_.getComponent())
         delete mon;
@@ -3508,6 +3513,8 @@ void TriggerContentComponent::onOutputSettingsChanged()
 {
     bridgeEngine_.setLtcOutputConvertFps (ltcConvertStrip_.getSelectedFps());
     queueLtcOutputApply();
+    if (settingsRestored_)
+        autoSaveSettings();
 }
 
 void TriggerContentComponent::onInputSettingsChanged()
@@ -3591,6 +3598,9 @@ void TriggerContentComponent::onInputSettingsChanged()
 
     if (err.isNotEmpty())
         setTimecodeStatusText (err, juce::Colour::fromRGB (0xde, 0x9b, 0x3c));
+
+    if (settingsRestored_)
+        autoSaveSettings();
 }
 
 void TriggerContentComponent::startAudioDeviceScan()
@@ -3619,13 +3629,16 @@ void TriggerContentComponent::onAudioScanComplete (const juce::Array<bridge::eng
     refreshLtcDeviceListsByDriver();
     refreshLtcChannelCombos();
     refreshNetworkMidiLists();
+    // Restore device settings only on the FIRST scan (launch). Manual re-scans
+    // must re-apply the current UI as before, not revert to the saved snapshot.
     if (pendingAutoLoad_)
-        maybeAutoLoadConfig();
-    else
+        maybeAutoLoadConfig();                                    // user's auto-load config (incl. its settings) wins
+    else if (settingsRestored_ || ! autoRestoreSettings())       // restore last-used settings once; else re-apply current UI
     {
         onInputSettingsChanged();
         onOutputSettingsChanged();
     }
+    settingsRestored_ = true;                                     // device combos are now valid; allow auto-save
 }
 
 void TriggerContentComponent::refreshNetworkMidiLists()
