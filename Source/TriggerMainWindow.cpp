@@ -3126,7 +3126,14 @@ void TriggerContentComponent::updateClipCountdowns()
 void TriggerContentComponent::evaluateAndFireTriggers()
 {
     if (! hasLiveInputTc_)
+    {
+        // Timecode stopped: cancel any pending end-action so it does not fire its OSC on the
+        // wall-clock timer after the timeline froze ("stop sends one more OSC to Arena" bug).
+        // processEndActions() runs every tick on getMillisecondCounterHiRes(), decoupled from
+        // the timecode, so a deadline that lands after the stop would otherwise still fire.
+        pendingEndActions_.clear();
         return;
+    }
     if (triggerRows_.empty())
         return;
 
