@@ -157,11 +157,16 @@ private:
     void loadRuntimePrefs();
     void saveRuntimePrefs() const;
     void maybeAutoLoadConfig();
+    // Auto-persist the source/device/output/Resolume settings so the chosen
+    // devices are restored on every launch (independent of the user's explicit
+    // "auto-load config" feature). Reuses the .etr settings serialisation.
+    void autoSaveSettings();
+    bool autoRestoreSettings();
     void showSaveConfigOptions (bool saveAs);
     void saveConfig (bool includeSettings, bool includeTriggers, bool saveAs);
     void loadConfigFrom (int modeId);
-    void saveConfigToFile (const juce::File& file, int modeId);
-    void loadConfigFromFile (const juce::File& file, int modeId);
+    void saveConfigToFile (const juce::File& file, int modeId, bool silent = false);
+    void loadConfigFromFile (const juce::File& file, int modeId, bool silent = false);
     int calcPreferredHeight() const;
     int calcHeightForState (bool sourceExpanded, int sourceId, bool triggerOutExpanded, bool outLtcExpanded, bool resolumeExpanded) const;
     void updateWindowHeight (bool forceGrow = true);
@@ -322,6 +327,10 @@ private:
     bool closeToTray_ { false };
     bool autoLoadOnStartup_ { false };
     bool pendingAutoLoad_ { false };
+    // True once the audio scan has run and device settings have been restored;
+    // gates auto-save so a fast open/close can't overwrite saved settings with
+    // the default combo values.
+    bool settingsRestored_ { false };
     bool hasLatchedTc_ { false };
     Timecode latchedTc_ {};
     FrameRate latchedFps_ { FrameRate::FPS_25 };

@@ -26,6 +26,15 @@ juce::File getRuntimePrefsFile()
         .getChildFile ("runtime_prefs.json");
 }
 
+// Internal snapshot of the source/device/output/Resolume settings, auto-saved
+// on change and auto-restored on launch so device config survives restarts.
+juce::File getAutoSettingsFile()
+{
+    return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+        .getChildFile ("EasyTrigger")
+        .getChildFile ("last_settings.etr");
+}
+
 std::optional<FrameRate> fpsFromString (juce::String text)
 {
     text = text.trim();
@@ -171,6 +180,33 @@ void TriggerContentComponent::maybeAutoLoadConfig()
     }
 }
 
+void TriggerContentComponent::autoSaveSettings()
+{
+    // Snapshot the current source/device/output/Resolume settings so they are
+    // restored on the next launch. Silent: no status text, and the user's
+    // chosen config file (lastConfigFile_) is left untouched.
+    saveConfigToFile (getAutoSettingsFile(), kConfigModeSettings, /*silent=*/true);
+}
+
+bool TriggerContentComponent::autoRestoreSettings()
+{
+    const auto file = getAutoSettingsFile();
+    if (! file.existsAsFile())
+        return false;
+    // Validate before committing to the restore path: a corrupt/empty snapshot
+    // must fall through to default device startup, not return true and leave the
+    // inputs unstarted (loadConfigFromFile only starts devices via the "left" branch).
+    auto parsed = bridge::core::ConfigStore::loadJsonFile (file);
+    if (! parsed.has_value() || ! parsed->isObject()
+        || parsed->getDynamicObject() == nullptr
+        || ! parsed->getDynamicObject()->hasProperty ("left"))
+        return false;
+    // Applies the saved combos and schedules the device (re)start. Settings-only
+    // mode never touches the trigger/clip rows.
+    loadConfigFromFile (file, kConfigModeSettings, /*silent=*/true);
+    return true;
+}
+
 void TriggerContentComponent::saveConfig (bool includeSettings, bool includeTriggers, bool saveAs)
 {
     int modeId = 0;
@@ -228,7 +264,7 @@ void TriggerContentComponent::loadConfigFrom (int modeId)
                                });
 }
 
-void TriggerContentComponent::saveConfigToFile (const juce::File& file, int modeId)
+void TriggerContentComponent::saveConfigToFile (const juce::File& file, int modeId, bool silent)
 {
     syncCustomGroupStateFromLayers();
 
@@ -392,7 +428,12 @@ void TriggerContentComponent::saveConfigToFile (const juce::File& file, int mode
         rootObj->setProperty ("custom_groups", juce::var (customGroups));
     }
 
-    if (bridge::core::ConfigStore::saveJsonFile (file, juce::var (rootObj)))
+    const bool ok = bridge::core::ConfigStore::saveJsonFile (file, juce::var (rootObj));
+
+    if (silent)  // auto-settings snapshot: no lastConfigFile_/prefs/status side effects
+        return;
+
+    if (ok)
     {
         lastConfigFile_ = file;
         saveRuntimePrefs();
@@ -404,12 +445,13 @@ void TriggerContentComponent::saveConfigToFile (const juce::File& file, int mode
     }
 }
 
-void TriggerContentComponent::loadConfigFromFile (const juce::File& file, int modeId)
+void TriggerContentComponent::loadConfigFromFile (const juce::File& file, int modeId, bool silent)
 {
     auto parsed = bridge::core::ConfigStore::loadJsonFile (file);
     if (! parsed.has_value() || ! parsed->isObject())
     {
-        setTimecodeStatusText ("Invalid config", juce::Colour::fromRGB (0xde, 0x9b, 0x3c));
+        if (! silent)
+            setTimecodeStatusText ("Invalid config", juce::Colour::fromRGB (0xde, 0x9b, 0x3c));
         return;
     }
 
@@ -702,6 +744,10 @@ void TriggerContentComponent::loadConfigFromFile (const juce::File& file, int mo
     updateWindowHeight();
     resized();
     repaint();
+
+    if (silent)  // auto-settings restore: leave lastConfigFile_/prefs/status untouched
+        return;
+
     lastConfigFile_ = file;
     saveRuntimePrefs();
     setTimecodeStatusText ("Config loaded: " + file.getFileName(), juce::Colour::fromRGB (0xec, 0x48, 0x3c));
