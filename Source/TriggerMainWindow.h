@@ -281,7 +281,6 @@ private:
     std::map<std::pair<int, int>, bool> triggerRangeActive_;
     int lastInputFrames_ { 0 };
     bool hasLastInputFrames_ { false };
-    double lastTriggerFireTs_ { 0.0 };
     juce::Component::SafePointer<juce::Component> statusMonitor_;
     juce::Component::SafePointer<juce::Component> preferencesWindow_;
     juce::Component::SafePointer<juce::Component> getClipsOptionsWindow_;
